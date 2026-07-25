@@ -1,3 +1,3 @@
-git add .
-git commit -m "add qrcode library"
-git push
+pyTelegramBotAPI
+qrcode
+Pillow
