@@ -1,24 +1,115 @@
 import os
-
-TOKEN = os.getenv("8370617478:AAHwWZRiyF72El1A_IOYpGXI2gicChcpe-c")
+import sqlite3
 import telebot
 import qrcode
+
 from telebot import types
 
-TOKEN = "8370617478:AAHwWZRiyF72El1A_IOYpGXI2gicChcpe-c"
+
+TOKEN = os.getenv("8370617478:AAHwWZRiyF72El1A_IOYpGXI2gicChcpe-c")
 
 ADMIN_ID = 7600986332
+
+QR_PRICE = 150
+
 
 bot = telebot.TeleBot(TOKEN)
 
 
-users = {}
-blocked_users = set()
-user_mode = {}
 
-qr_count = 0
-broadcast_mode = False
+# ================= DATABASE =================
 
+db = sqlite3.connect(
+    "users.db",
+    check_same_thread=False
+)
+
+cursor = db.cursor()
+
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users(
+    id INTEGER PRIMARY KEY,
+    username TEXT,
+    name TEXT,
+    phone TEXT,
+    balance INTEGER DEFAULT 1000,
+    spent INTEGER DEFAULT 0,
+    qr_count INTEGER DEFAULT 0
+)
+""")
+
+
+db.commit()
+
+
+
+def add_user(message):
+
+    uid = message.from_user.id
+
+    cursor.execute(
+        "SELECT id FROM users WHERE id=?",
+        (uid,)
+    )
+
+    result = cursor.fetchone()
+
+
+    if not result:
+
+        cursor.execute(
+            """
+            INSERT INTO users
+            (id,username,name,balance)
+            VALUES(?,?,?,?)
+            """,
+            (
+                uid,
+                message.from_user.username,
+                message.from_user.first_name,
+                1000
+            )
+        )
+
+        db.commit()
+
+
+
+def get_user(uid):
+
+    cursor.execute(
+        "SELECT * FROM users WHERE id=?",
+        (uid,)
+    )
+
+    return cursor.fetchone()
+
+
+
+def update_user(uid,balance,spent,qr):
+
+    cursor.execute(
+        """
+        UPDATE users
+        SET balance=?,
+        spent=?,
+        qr_count=?
+        WHERE id=?
+        """,
+        (
+            balance,
+            spent,
+            qr,
+            uid
+        )
+    )
+
+    db.commit()
+
+
+
+# ================= MENULAR =================
 
 
 def main_menu():
@@ -27,23 +118,33 @@ def main_menu():
         resize_keyboard=True
     )
 
+
     menu.add(
         "🌐 Link",
         "📝 Matn"
     )
+
 
     menu.add(
         "📞 Telefon",
         "📧 Email"
     )
 
+
     menu.add(
         "📶 Wi-Fi"
     )
 
+
+    menu.add(
+        "💳 Hisobim"
+    )
+
+
     menu.add(
         "📱 Raqam yuborish"
     )
+
 
     return menu
 
@@ -51,41 +152,61 @@ def main_menu():
 
 def admin_menu():
 
-    panel = types.ReplyKeyboardMarkup(
+    menu = types.ReplyKeyboardMarkup(
         resize_keyboard=True
     )
 
-    panel.add(
+
+    menu.add(
         "📊 Statistika",
-        "📢 Xabar yuborish"
+        "💰 Pul berish"
     )
 
-    panel.add(
+
+    menu.add(
+        "🎁 Bonus"
+    )
+
+
+    menu.add(
         "🚫 Bloklash",
-        "✅ Blokdan chiqarish"
+        "✅ Ochish"
     )
 
-    panel.add(
-        "🚪 Admin paneldan chiqish"
+
+    menu.add(
+        "🚪 Chiqish"
     )
 
-    return panel
 
+    return menu
+
+
+
+# vaqtinchalik holatlar
+
+user_mode = {}
+
+blocked = set()
+
+
+
+# ================= START =================
 
 
 @bot.message_handler(commands=["start"])
 def start(message):
 
-    users[message.from_user.id] = {
-        "username": message.from_user.username,
-        "name": message.from_user.first_name
-    }
+    add_user(message)
 
 
-    if message.from_user.id in blocked_users:
+    uid = message.from_user.id
+
+
+    if uid in blocked:
 
         bot.send_message(
-            message.chat.id,
+            uid,
             "🚫 Siz bloklangansiz"
         )
 
@@ -93,10 +214,10 @@ def start(message):
 
 
 
-    if message.from_user.id == ADMIN_ID:
+    if uid == ADMIN_ID:
 
         bot.send_message(
-            message.chat.id,
+            uid,
             "👑 Admin panel",
             reply_markup=admin_menu()
         )
@@ -104,11 +225,21 @@ def start(message):
     else:
 
         bot.send_message(
-            message.chat.id,
-            "🤖 QR Code bot",
+            uid,
+            """
+🤖 QR CODE BOT
+
+💰 Boshlang'ich balans: 1000 so'm
+
+Har bir QR:
+150 so'm
+""",
             reply_markup=main_menu()
         )
 
+
+
+# ================= ADMIN =================
 
 
 @bot.message_handler(commands=["admin"])
@@ -121,19 +252,20 @@ def admin(message):
             "👑 Admin panel",
             reply_markup=admin_menu()
         )
-        
+        # ================= XABARLAR =================
+
+
 @bot.message_handler(func=lambda message: True)
 def messages(message):
-
-    global qr_count
-    global broadcast_mode
-
 
     uid = message.from_user.id
     text = message.text
 
 
-    if uid in blocked_users and uid != ADMIN_ID:
+    add_user(message)
+
+
+    if uid in blocked and uid != ADMIN_ID:
 
         bot.send_message(
             uid,
@@ -144,16 +276,19 @@ def messages(message):
 
 
 
-    # ADMIN PANEL
+    # ================= ADMIN PANEL =================
+
 
     if uid == ADMIN_ID:
 
 
-        if text == "🚪 Admin paneldan chiqish":
+        # CHIQISH
+
+        if text == "🚪 Chiqish":
 
             bot.send_message(
                 uid,
-                "✅ Oddiy menyu",
+                "Oddiy menyu",
                 reply_markup=main_menu()
             )
 
@@ -161,25 +296,22 @@ def messages(message):
 
 
 
+        # STATISTIKA
+
         if text == "📊 Statistika":
 
-            info = "👥 Foydalanuvchilar:\n\n"
+            cursor.execute(
+                "SELECT COUNT(*),SUM(qr_count) FROM users"
+            )
 
-            for user_id,data in users.items():
-
-                username = data["username"]
-
-                if username:
-                    username = "@" + username
-                else:
-                    username = "Username yo'q"
+            data = cursor.fetchone()
 
 
-                info += (
-                    f"🆔 {user_id}\n"
-                    f"👤 {data['name']}\n"
-                    f"🔗 {username}\n\n"
-                )
+            cursor.execute(
+                "SELECT SUM(balance) FROM users"
+            )
+
+            money = cursor.fetchone()[0]
 
 
             bot.send_message(
@@ -187,11 +319,14 @@ def messages(message):
                 f"""
 📊 STATISTIKA
 
-👥 Userlar: {len(users)}
-📱 QR soni: {qr_count}
-🚫 Bloklangan: {len(blocked_users)}
+👥 Userlar:
+{data[0]}
 
-{info}
+📱 Yaratilgan QR:
+{data[1] or 0}
+
+💰 Umumiy balans:
+{money or 0} so'm
 """
             )
 
@@ -199,125 +334,216 @@ def messages(message):
 
 
 
+        # PUL BERISH
+
+        if text == "💰 Pul berish":
+
+            user_mode[uid] = "give"
+
+            bot.send_message(
+                uid,
+                """
+ID va pul yuboring
+
+Misol:
+123456789 5000
+"""
+            )
+
+            return
+
+
+
+        if user_mode.get(uid) == "give":
+
+            try:
+
+                user_id, amount = text.split()
+
+                user_id = int(user_id)
+                amount = int(amount)
+
+
+                user = get_user(user_id)
+
+
+                if user:
+
+                    cursor.execute(
+                        """
+                        UPDATE users
+                        SET balance=balance+?
+                        WHERE id=?
+                        """,
+                        (
+                            amount,
+                            user_id
+                        )
+                    )
+
+                    db.commit()
+
+
+                    bot.send_message(
+                        uid,
+                        "✅ Pul berildi"
+                    )
+
+
+                    bot.send_message(
+                        user_id,
+                        f"💰 Sizga {amount} so'm qo'shildi"
+                    )
+
+
+                else:
+
+                    bot.send_message(
+                        uid,
+                        "❌ User topilmadi"
+                    )
+
+
+            except:
+
+                bot.send_message(
+                    uid,
+                    "❌ Format xato"
+                )
+
+
+            user_mode.pop(uid)
+
+            return
+
+
+
+
+        # BONUS
+
+        if text == "🎁 Bonus":
+
+            user_mode[uid] = "bonus"
+
+            bot.send_message(
+                uid,
+                "Bonus summasini yuboring:"
+            )
+
+            return
+
+
+
+        if user_mode.get(uid) == "bonus":
+
+            try:
+
+                bonus = int(text)
+
+
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET balance=balance+?
+                    """,
+                    (bonus,)
+                )
+
+
+                db.commit()
+
+
+                bot.send_message(
+                    uid,
+                    "🎁 Hamma userga bonus berildi"
+                )
+
+
+            except:
+
+                bot.send_message(
+                    uid,
+                    "❌ Son yuboring"
+                )
+
+
+            user_mode.pop(uid)
+
+            return
+
+
+
+        # BLOKLASH
+
         if text == "🚫 Bloklash":
 
             user_mode[uid] = "block"
 
             bot.send_message(
                 uid,
-                "🚫 Blok qilinadigan ID yuboring:"
+                "User ID yuboring:"
             )
 
             return
 
 
 
-        if text == "✅ Blokdan chiqarish":
+        if user_mode.get(uid) == "block":
 
-            user_mode[uid] = "unblock"
+            try:
 
-            bot.send_message(
-                uid,
-                "✅ Ochiladigan ID yuboring:"
-            )
-
-            return
+                blocked.add(
+                    int(text)
+                )
 
 
+                bot.send_message(
+                    uid,
+                    "🚫 Bloklandi"
+                )
 
-        if text == "📢 Xabar yuborish":
+            except:
 
-            broadcast_mode = True
-
-            bot.send_message(
-                uid,
-                "📢 Xabar matnini yuboring:"
-            )
-
-            return
+                pass
 
 
-
-        if broadcast_mode:
-
-            broadcast_mode = False
-
-
-            for user_id in users:
-
-                try:
-
-                    bot.send_message(
-                        user_id,
-                        "📢 Admin xabari:\n\n" + text
-                    )
-
-                except:
-
-                    pass
-
-
-
-            bot.send_message(
-                uid,
-                "✅ Xabar yuborildi"
-            )
+            user_mode.pop(uid)
 
             return
 
 
 
-        # BLOK / OCHISH
 
-        if uid in user_mode:
-
-
-            if user_mode[uid] == "block":
-
-                try:
-
-                    blocked_users.add(int(text))
-
-                    bot.send_message(
-                        uid,
-                        "🚫 User bloklandi"
-                    )
-
-                except:
-
-                    bot.send_message(
-                        uid,
-                        "❌ ID xato"
-                    )
+    # ================= HISOBIM =================
 
 
-                user_mode.pop(uid)
+    if text == "💳 Hisobim":
 
-                return
-
-
-
-            if user_mode[uid] == "unblock":
-
-                try:
-
-                    blocked_users.discard(int(text))
-
-                    bot.send_message(
-                        uid,
-                        "✅ User ochildi"
-                    )
-
-                except:
-
-                    pass
+        user = get_user(uid)
 
 
-                user_mode.pop(uid)
+        bot.send_message(
+            uid,
+            f"""
+💳 HISOBIM
 
-                return
-            
-    # QR MENYU
+💰 Balans:
+{user[4]} so'm
+
+📱 QR soni:
+{user[6]}
+
+💸 Ishlatilgan:
+{user[5]} so'm
+"""
+        )
+
+        return
+
+
+
+    # ================= QR TANLASH =================
+
 
     if text == "🌐 Link":
 
@@ -351,7 +577,7 @@ def messages(message):
 
         bot.send_message(
             uid,
-            "📞 Telefon raqam yuboring:"
+            "📞 Raqam yuboring:"
         )
 
         return
@@ -377,41 +603,11 @@ def messages(message):
 
         bot.send_message(
             uid,
-            "📶 Format:\nWiFi nomi|Parol"
+            "WiFi|Parol yuboring:"
         )
 
         return
-
-
-
-    # TELEFON KONTAKT
-
-    if text == "📱 Raqam yuborish":
-
-        keyboard = types.ReplyKeyboardMarkup(
-            resize_keyboard=True
-        )
-
-        button = types.KeyboardButton(
-            "📞 Kontakt yuborish",
-            request_contact=True
-        )
-
-        keyboard.add(button)
-
-
-        bot.send_message(
-            uid,
-            "Raqamingizni yuboring:",
-            reply_markup=keyboard
-        )
-
-        return
-
-
-
-
-    # QR YARATISH
+        # ================= QR YARATISH =================
 
 
     if uid in user_mode:
@@ -419,7 +615,33 @@ def messages(message):
 
         mode = user_mode[uid]
 
+
         data = text
+
+
+        user = get_user(uid)
+
+
+        # BALANS TEKSHIRISH
+
+        if user[4] < QR_PRICE:
+
+            bot.send_message(
+                uid,
+                f"""
+❌ Balans yetarli emas
+
+QR narxi:
+{QR_PRICE} so'm
+
+Sizda:
+{user[4]} so'm
+"""
+            )
+
+            user_mode.pop(uid)
+
+            return
 
 
 
@@ -448,11 +670,13 @@ def messages(message):
                     f"P:{password};;"
                 )
 
+
             except:
+
 
                 bot.send_message(
                     uid,
-                    "❌ Format xato"
+                    "❌ Format xato\nMisol: WiFi|12345678"
                 )
 
                 return
@@ -460,49 +684,110 @@ def messages(message):
 
 
 
+        # QR YASASH
+
+
         img = qrcode.make(data)
 
-        img.save("qr.png")
+
+        img.save(
+            "qr.png"
+        )
 
 
-        qr_count += 1
+
+        # PUL AYIRISH
+
+
+        new_balance = user[4] - QR_PRICE
+
+        new_spent = user[5] + QR_PRICE
+
+        new_qr = user[6] + 1
 
 
 
-        with open("qr.png","rb") as photo:
+        update_user(
+            uid,
+            new_balance,
+            new_spent,
+            new_qr
+        )
+
+
+
+        with open(
+            "qr.png",
+            "rb"
+        ) as photo:
 
 
             bot.send_photo(
                 uid,
                 photo,
-                caption="✅ QR kod tayyor!"
+                caption=f"""
+✅ QR kod tayyor
+
+💸 {QR_PRICE} so'm yechildi
+
+💰 Qolgan balans:
+{new_balance} so'm
+"""
             )
+
 
 
         user_mode.pop(uid)
 
+        return
 
 
 
-# KONTAKT QABUL QILISH
 
-@bot.message_handler(content_types=["contact"])
+
+# ================= KONTAKT =================
+
+
+@bot.message_handler(
+    content_types=["contact"]
+)
 def contact(message):
 
-    users[message.from_user.id]["phone"] = (
-        message.contact.phone_number
+    uid = message.from_user.id
+
+
+    cursor.execute(
+        """
+        UPDATE users
+        SET phone=?
+        WHERE id=?
+        """,
+        (
+            message.contact.phone_number,
+            uid
+        )
     )
+
+
+    db.commit()
 
 
     bot.send_message(
-        message.chat.id,
-        "✅ Raqam saqlandi"
+        uid,
+        "✅ Raqamingiz saqlandi",
+        reply_markup=main_menu()
     )
 
 
 
 
-print("BOT ISHLADI")
+
+# ================= RUN =================
+
+
+print(
+    "BOT ISHLADI"
+)
 
 
 bot.infinity_polling()
