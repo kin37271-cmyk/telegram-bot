@@ -6,7 +6,7 @@ import qrcode
 from telebot import types
 
 
-TOKEN = os.getenv("8370617478:AAHwWZRiyF72El1A_IOYpGXI2gicChcpe-c")
+TOKEN = os.getenv("8370617478:AAHSzoSM401p7v0i6ioSI7R7laaok-Wn5L0")
 
 ADMIN_ID = 7600986332
 
