@@ -1,173 +1,312 @@
+# ===============================
+# QR CODE BOT 1-QISM A
+# ===============================
+
 import telebot
 import qrcode
-import sqlite3
-
+import os
+from datetime import datetime
 from telebot import types
 
 
-# TOKEN SHU YERGA
-TOKEN = "8370617478:AAHSzoSM401p7v0i6ioSI7R7laaok-Wn5L0"
+# ===============================
+# SOZLAMALAR
+# ===============================
 
+TOKEN = "8370617478:AAHSzoSM401p7v0i6ioSI7R7laaok-Wn5L0"
+ADMIN_ID = 7600986332   # o'zingizni Telegram ID yozing
 
 bot = telebot.TeleBot(TOKEN)
 
 
-ADMIN_ID = 7600986332
-QR_PRICE = 150
+# ===============================
+# DATABASE USERS.TXT
+# ===============================
+
+FILE = "users.txt"
 
 
-# DATABASE
-
-db = sqlite3.connect(
-    "users.db",
-    check_same_thread=False
-)
-
-cursor = db.cursor()
+def create_file():
+    if not os.path.exists(FILE):
+        open(FILE, "w", encoding="utf-8").close()
 
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users(
-    id INTEGER PRIMARY KEY,
-    username TEXT,
-    name TEXT,
-    balance INTEGER DEFAULT 1000,
-    spent INTEGER DEFAULT 0,
-    qr_count INTEGER DEFAULT 0
-)
-""")
+create_file()
 
 
-db.commit()
+# FORMAT:
+
+# id|ism|username|telefon|balans|spent|qr|status|date
 
 
+def get_users():
 
-def add_user(message):
+    users = []
 
-    uid = message.from_user.id
+    with open(FILE, "r", encoding="utf-8") as f:
 
-    cursor.execute(
-        "SELECT id FROM users WHERE id=?",
-        (uid,)
-    )
+        for line in f:
 
-    if cursor.fetchone() is None:
+            line=line.strip()
 
-        cursor.execute(
-            """
-            INSERT INTO users
-            (id,username,name)
-            VALUES(?,?,?)
-            """,
-            (
-                uid,
-                message.from_user.username,
-                message.from_user.first_name
-            )
-        )
+            if line:
 
-        db.commit()
+                data=line.split("|")
+
+                users.append(data)
+
+    return users
 
 
 
-def get_user(uid):
+def save_users(users):
 
-    cursor.execute(
-        "SELECT * FROM users WHERE id=?",
-        (uid,)
-    )
+    with open(FILE,"w",encoding="utf-8") as f:
 
-    return cursor.fetchone()
+        for u in users:
 
-
-
-def update_user(uid,balance,spent,qr):
-
-    cursor.execute(
-        """
-        UPDATE users
-        SET balance=?,
-            spent=?,
-            qr_count=?
-        WHERE id=?
-        """,
-        (
-            balance,
-            spent,
-            qr,
-            uid
-        )
-    )
-
-    db.commit()
+            f.write("|".join(u)+"\n")
 
 
 
-user_mode = {}
-# ================= MENULAR =================
+def find_user(uid):
+
+    users=get_users()
+
+    for u in users:
+
+        if u[0]==str(uid):
+
+            return u
+
+    return None
+
+
+
+def add_user(user):
+
+    users=get_users()
+
+    users.append(user)
+
+    save_users(users)
+
+
+
+def update_user(user):
+
+    users=get_users()
+
+    for i,u in enumerate(users):
+
+        if u[0]==user[0]:
+
+            users[i]=user
+
+    save_users(users)
+
+
+
+# ===============================
+# KLAVIATURA
+# ===============================
 
 
 def main_menu():
 
-    menu = types.ReplyKeyboardMarkup(
+    kb=types.ReplyKeyboardMarkup(
         resize_keyboard=True
     )
 
-    menu.add(
-        "🌐 Link",
-        "📝 Matn"
+    kb.row(
+        "📱 QR yaratish",
+        "👤 Profil"
     )
 
-    menu.add(
-        "📞 Telefon",
-        "📧 Email"
+    kb.row(
+        "💰 Hisobim",
+        "💳 Hisob to'ldirish"
     )
 
-    menu.add(
-        "📶 Wi-Fi"
+    kb.row(
+        "📊 Statistika",
+        "ℹ️ Yordam"
     )
 
-    menu.add(
-        "💳 Hisobim"
-    )
-
-    return menu
+    return kb
 
 
 
 def admin_menu():
 
-    menu = types.ReplyKeyboardMarkup(
+    kb=types.ReplyKeyboardMarkup(
         resize_keyboard=True
     )
 
-    menu.add(
-        "📊 Statistika"
+    kb.row(
+        "📊 Admin statistika",
+        "👥 Mijozlar"
     )
 
-    menu.add(
-        "💰 Pul berish"
+    kb.row(
+        "💰 Pul qo'shish",
+        "➖ Pul olish"
     )
 
-    return menu
+    kb.row(
+        "🎁 Bonus",
+        "🚫 Bloklash"
+    )
+
+    kb.row(
+        "📢 Reklama"
+
+    )
+
+    return kb
 
 
 
-# ================= START =================
+# ===============================
+# START
+# ===============================
 
 
 @bot.message_handler(commands=["start"])
 def start(message):
 
-    add_user(message)
+    uid=message.from_user.id
 
-    uid = message.from_user.id
+    user=find_user(uid)
 
 
-    if uid == ADMIN_ID:
+    if not user:
+
+
+        new=[
+
+            str(uid),
+
+            message.from_user.first_name or "NoName",
+
+            "@"+message.from_user.username 
+            if message.from_user.username 
+            else "None",
+
+            "0",
+
+            "0",
+
+            "0",
+
+            "active",
+
+            str(datetime.now().date())
+
+        ]
+
+
+        add_user(new)
+
 
         bot.send_message(
             uid,
+            "🎉 Xush kelibsiz!\n\n"
+            "QR Code yaratish botiga xush kelibsiz.",
+            reply_markup=main_menu()
+        )
+
+
+    else:
+
+        bot.send_message(
+            uid,
+            "👋 Qaytganingiz bilan!",
+            reply_markup=main_menu()
+        )
+
+
+
+# ===============================
+# PROFIL
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="👤 Profil")
+def profile(message):
+
+    user=find_user(message.from_user.id)
+
+
+    if user:
+
+        text=f"""
+👤 Profil
+
+🆔 ID:
+{user[0]}
+
+👨 Ism:
+{user[1]}
+
+Username:
+{user[2]}
+
+💰 Balans:
+{user[4]} so'm
+
+📱 QR soni:
+{user[6]}
+
+📅 Sana:
+{user[8]}
+"""
+
+        bot.send_message(
+            message.chat.id,
+            text
+        )
+
+
+
+# ===============================
+# HISOBIM
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="💰 Hisobim")
+def balance(message):
+
+    user=find_user(message.from_user.id)
+
+
+    bot.send_message(
+        message.chat.id,
+        f"""
+💰 Hisobingiz
+
+Balans:
+{user[4]} so'm
+
+Ishlatilgan:
+{user[5]} so'm
+"""
+    )
+
+
+
+# ===============================
+# ADMIN KIRISH
+# ===============================
+
+
+@bot.message_handler(commands=["admin"])
+def admin(message):
+
+    if message.from_user.id==ADMIN_ID:
+
+        bot.send_message(
+            message.chat.id,
             "👑 Admin panel",
             reply_markup=admin_menu()
         )
@@ -175,275 +314,567 @@ def start(message):
     else:
 
         bot.send_message(
-            uid,
-            """
-🤖 QR BOT
-
-💰 Boshlang'ich balans: 1000 so'm
-
-QR narxi:
-150 so'm
-""",
-            reply_markup=main_menu()
-        )
-
-
-
-# ================= ADMIN =================
-
-
-@bot.message_handler(commands=["admin"])
-def admin(message):
-
-    if message.from_user.id == ADMIN_ID:
-
-        bot.send_message(
             message.chat.id,
-            "👑 Admin",
-            reply_markup=admin_menu()
-        )
-        # ================= XABARLAR =================
-
-
-@bot.message_handler(func=lambda message: True)
-def messages(message):
-
-    uid = message.from_user.id
-    text = message.text
-
-    add_user(message)
-
-
-    # HISOB
-
-    if text == "💳 Hisobim":
-
-        user = get_user(uid)
-
-        bot.send_message(
-            uid,
-            f"""
-💳 HISOB
-
-💰 Balans:
-{user[3]} so'm
-
-📱 QR:
-{user[5]} ta
-
-💸 Sarflangan:
-{user[4]} so'm
-"""
-        )
-
-        return
-
-
-
-    # QR TANLASH
-
-
-    if text == "🌐 Link":
-
-        user_mode[uid] = "link"
-
-        bot.send_message(
-            uid,
-            "🔗 Link yuboring:"
-        )
-
-        return
-
-
-
-    if text == "📝 Matn":
-
-        user_mode[uid] = "text"
-
-        bot.send_message(
-            uid,
-            "📝 Matn yuboring:"
-        )
-
-        return
-
-
-
-    if text == "📞 Telefon":
-
-        user_mode[uid] = "phone"
-
-        bot.send_message(
-            uid,
-            "📞 Raqam yuboring:"
-        )
-
-        return
-
-
-
-    if text == "📧 Email":
-
-        user_mode[uid] = "email"
-
-        bot.send_message(
-            uid,
-            "📧 Email yuboring:"
-        )
-
-        return
-
-
-
-    if text == "📶 Wi-Fi":
-
-        user_mode[uid] = "wifi"
-
-        bot.send_message(
-            uid,
-            "WiFi|Parol\nMisol:\nUyWifi|12345678"
-        )
-
-        return
-
-
-
-    # QR YASASH
-
-
-    if uid in user_mode:
-
-        user = get_user(uid)
-
-
-        if user[3] < QR_PRICE:
-
-            bot.send_message(
-                uid,
-                "❌ Balans yetarli emas"
-            )
-
-            user_mode.pop(uid)
-
-            return
-
-
-
-        data = text
-
-        mode = user_mode[uid]
-
-
-        if mode == "phone":
-
-            data = "tel:" + text
-
-
-        elif mode == "email":
-
-            data = "mailto:" + text
-
-
-        elif mode == "wifi":
-
-            try:
-
-                name,password = text.split("|")
-
-                data = (
-                    f"WIFI:T:WPA;"
-                    f"S:{name};"
-                    f"P:{password};;"
-                )
-
-            except:
-
-                bot.send_message(
-                    uid,
-                    "❌ Format xato"
-                )
-
-                return
-
-
-
-        qr = qrcode.make(data)
-
-        qr.save("qr.png")
-
-
-
-        update_user(
-            uid,
-            user[3]-QR_PRICE,
-            user[4]+QR_PRICE,
-            user[5]+1
-        )
-
-
-        with open(
-            "qr.png",
-            "rb"
-        ) as photo:
-
-
-            bot.send_photo(
-                uid,
-                photo,
-                caption="✅ QR kod tayyor"
-            )
-
-
-        user_mode.pop(uid)
-
-        return
-    # ================= ADMIN STAT =================
-
-
-@bot.message_handler(commands=["stat"])
-def stat(message):
-
-    if message.from_user.id == ADMIN_ID:
-
-        cursor.execute(
-            "SELECT COUNT(*) FROM users"
-        )
-
-        users = cursor.fetchone()[0]
-
-
-        bot.send_message(
-            message.chat.id,
-            f"""
-📊 STATISTIKA
-
-👥 Userlar:
-{users}
-"""
+            "❌ Siz admin emassiz"
         )
 
 
 
-# ================= KONTAKT =================
+print("BOT ISHGA TUSHDI")
 
 
-@bot.message_handler(
-    content_types=["contact"]
-)
-def contact(message):
+bot.infinity_polling()
+# ===============================
+# 2-QISM QR CODE SISTEMA
+# ===============================
+
+
+def create_qr(data, name):
+
+    path=f"{name}.png"
+
+    img=qrcode.make(data)
+
+    img.save(path)
+
+    return path
+
+
+
+# ===============================
+# QR MENU
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="📱 QR yaratish")
+def qr_menu(message):
+
+    kb=types.ReplyKeyboardMarkup(
+        resize_keyboard=True
+    )
+
+    kb.row(
+        "🔗 Link QR",
+        "☎ Telefon QR"
+    )
+
+    kb.row(
+        "📝 Matn QR",
+        "📶 WiFi QR"
+    )
+
+    kb.row(
+        "📍 Lokatsiya QR",
+        "⬅️ Orqaga"
+    )
+
 
     bot.send_message(
         message.chat.id,
-        "✅ Raqam saqlandi",
-        reply_markup=main_menu()
+        "QR turini tanlang:",
+        reply_markup=kb
     )
 
 
 
-# ================= RUN =================
+# ===============================
+# LINK QR
+# ===============================
 
 
-print("BOT ISHLADI")
+@bot.message_handler(func=lambda m:m.text=="🔗 Link QR")
+def link_qr(message):
+
+    msg=bot.send_message(
+        message.chat.id,
+        "🔗 Link yuboring:"
+    )
+
+    bot.register_next_step_handler(
+        msg,
+        make_link_qr
+    )
 
 
-bot.infinity_polling()
+def make_link_qr(message):
+
+    file=create_qr(
+        message.text,
+        "link_qr"
+    )
+
+
+    bot.send_photo(
+        message.chat.id,
+        open(file,"rb"),
+        caption="✅ Link QR tayyor"
+    )
+
+
+    os.remove(file)
+
+
+
+# ===============================
+# TELEFON QR
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="☎ Telefon QR")
+def phone_qr(message):
+
+    msg=bot.send_message(
+        message.chat.id,
+        "☎ Telefon raqam yuboring:"
+    )
+
+
+    bot.register_next_step_handler(
+        msg,
+        make_phone_qr
+    )
+
+
+
+def make_phone_qr(message):
+
+    data="tel:"+message.text
+
+
+    file=create_qr(
+        data,
+        "phone_qr"
+    )
+
+
+    bot.send_photo(
+        message.chat.id,
+        open(file,"rb"),
+        caption="✅ Telefon QR tayyor"
+    )
+
+
+    os.remove(file)
+
+
+
+# ===============================
+# MATN QR
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="📝 Matn QR")
+def text_qr(message):
+
+    msg=bot.send_message(
+        message.chat.id,
+        "📝 Matn yozing:"
+    )
+
+
+    bot.register_next_step_handler(
+        msg,
+        make_text_qr
+    )
+
+
+
+def make_text_qr(message):
+
+
+    file=create_qr(
+        message.text,
+        "text_qr"
+    )
+
+
+    bot.send_photo(
+        message.chat.id,
+        open(file,"rb"),
+        caption="✅ Matn QR tayyor"
+    )
+
+
+    os.remove(file)
+
+
+
+
+# ===============================
+# WIFI QR
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="📶 WiFi QR")
+def wifi_qr(message):
+
+    msg=bot.send_message(
+        message.chat.id,
+        """
+📶 WiFi ma'lumotlarini yuboring:
+
+Format:
+
+SSID|PASSWORD
+
+Misol:
+
+Wifi123|12345678
+"""
+    )
+
+
+    bot.register_next_step_handler(
+        msg,
+        make_wifi_qr
+    )
+
+
+
+def make_wifi_qr(message):
+
+
+    data=message.text.split("|")
+
+
+    if len(data)!=2:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Format xato"
+        )
+
+        return
+
+
+    wifi=f"WIFI:T:WPA;S:{data[0]};P:{data[1]};;"
+
+
+    file=create_qr(
+        wifi,
+        "wifi_qr"
+    )
+
+
+    bot.send_photo(
+        message.chat.id,
+        open(file,"rb"),
+        caption="✅ WiFi QR tayyor"
+    )
+
+
+    os.remove(file)
+
+
+
+# ===============================
+# LOKATSIYA QR
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="📍 Lokatsiya QR")
+def location_qr(message):
+
+    msg=bot.send_message(
+        message.chat.id,
+        """
+📍 Lokatsiya yuboring
+
+Format:
+
+latitude,longitude
+
+Misol:
+
+41.3111,69.2797
+"""
+    )
+
+
+    bot.register_next_step_handler(
+        msg,
+        make_location_qr
+    )
+
+
+
+def make_location_qr(message):
+
+
+    loc=message.text.split(",")
+
+
+    if len(loc)!=2:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Format xato"
+        )
+
+        return
+
+
+
+    data=f"https://maps.google.com/?q={loc[0]},{loc[1]}"
+
+
+    file=create_qr(
+        data,
+        "location_qr"
+    )
+
+
+    bot.send_photo(
+        message.chat.id,
+        open(file,"rb"),
+        caption="✅ Lokatsiya QR tayyor"
+    )
+
+
+    os.remove(file)
+
+
+
+
+# ===============================
+# ORQAGA
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="⬅️ Orqaga")
+def back(message):
+
+    bot.send_message(
+        message.chat.id,
+        "Asosiy menyu",
+        reply_markup=main_menu()
+    )
+    # ===============================
+# 3-QISM HISOB TO'LDIRISH
+# ===============================
+
+
+# vaqtinchalik to'lov saqlash
+payments = {}
+
+
+
+# ===============================
+# HISOB TO'LDIRISH
+# ===============================
+
+
+@bot.message_handler(func=lambda m:m.text=="💳 Hisob to'ldirish")
+def add_balance(message):
+
+    bot.send_message(
+        message.chat.id,
+        """
+💳 Hisob to'ldirish
+
+To'lovni amalga oshiring.
+
+To'lov qilganingizdan keyin:
+- chek rasmini yuboring
+- yoki to'lov skrinshotini yuboring
+
+Admin tekshiradi.
+
+⏳ Admin 3 soat ichida javob beradi.
+"""
+    )
+
+    bot.register_next_step_handler(
+        message,
+        get_payment
+    )
+
+
+
+# ===============================
+# CHEK QABUL QILISH
+# ===============================
+
+
+def get_payment(message):
+
+    uid=message.from_user.id
+
+
+    payments[uid]={
+        "user":uid,
+        "message_id":message.message_id
+    }
+
+
+
+    if message.photo:
+
+
+        file_id=message.photo[-1].file_id
+
+
+        payments[uid]["photo"]=file_id
+
+
+
+        user=find_user(uid)
+
+
+
+        text=f"""
+🔔 Yangi to'lov so'rovi
+
+👤 Ism:
+{user[1]}
+
+🆔 ID:
+{user[0]}
+
+Username:
+{user[2]}
+
+📌 Tekshirish kerak.
+"""
+
+
+        kb=types.InlineKeyboardMarkup()
+
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "✅ Tasdiqlash",
+                callback_data=f"pay_yes_{uid}"
+            )
+        )
+
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "❌ Rad qilish",
+                callback_data=f"pay_no_{uid}"
+            )
+        )
+
+
+        bot.send_photo(
+            ADMIN_ID,
+            file_id,
+            caption=text,
+            reply_markup=kb
+        )
+
+
+    else:
+
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Iltimos chek rasmini yuboring."
+        )
+
+        return
+
+
+
+    bot.send_message(
+        message.chat.id,
+        """
+✅ Chek qabul qilindi.
+
+Admin tekshiradi.
+
+⏳ 3 soat ichida javob beriladi.
+"""
+    )
+
+
+
+# ===============================
+# ADMIN TO'LOV JAVOBI
+# ===============================
+
+
+@bot.callback_query_handler(
+    func=lambda call:
+    call.data.startswith("pay_")
+)
+def payment_answer(call):
+
+
+    data=call.data.split("_")
+
+
+    action=data[1]
+
+    uid=int(data[2])
+
+
+
+    if call.from_user.id!=ADMIN_ID:
+
+        return
+
+
+
+    user=find_user(uid)
+
+
+
+    if action=="yes":
+
+
+        # default summa
+        # keyin admin paneldan o'zgartiramiz
+
+
+        user[4]=str(
+            int(user[4])+10000
+        )
+
+
+        update_user(user)
+
+
+
+        bot.send_message(
+            uid,
+            """
+✅ To'lov tasdiqlandi.
+
+💰 Hisobingizga 10000 so'm qo'shildi.
+"""
+        )
+
+
+        bot.answer_callback_query(
+            call.id,
+            "Tasdiqlandi"
+        )
+
+
+
+    elif action=="no":
+
+
+        bot.send_message(
+            uid,
+            """
+❌ To'lov rad qilindi.
+
+Qaytadan yuborishingiz mumkin.
+"""
+        )
+
+
+        bot.answer_callback_query(
+            call.id,
+            "Rad qilindi"
+        )
+
+
+
+# ===============================
+# ADMIN PUL BERISH FUNKSIYA
+# KEYINGI QISMDA TO'LIQ PANELGA ULANADI
+# ===============================
